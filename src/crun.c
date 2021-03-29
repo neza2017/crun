@@ -296,6 +296,12 @@ static struct argp argp = { options, parse_opt, args_doc, doc, NULL, NULL, NULL 
 int
 main (int argc, char **argv)
 {
+  printf("========== input args ==========\n");
+  for(int i=0;i<argc;i++){
+    printf("%d -> %s\n",i,argv[i]);
+  }
+  printf("==========     end    ==========\n");
+
   libcrun_error_t err = NULL;
   int ret, first_argument = 0;
 
