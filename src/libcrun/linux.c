@@ -1490,6 +1490,7 @@ libcrun_run_linux_container (libcrun_container *container,
                              int *sync_socket_out,
                              libcrun_error_t *err)
 {
+  printf("============== run linux container =====================");
   oci_container *def = container->container_def;
   size_t i;
   int ret;
