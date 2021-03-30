@@ -420,7 +420,7 @@ make_container (oci_container *container_def)
 libcrun_container *
 libcrun_container_load_from_memory (const char *json, libcrun_error_t *err)
 {
-  printf("libcrun_container_load_from_memory, json = %s",json);
+  printf("libcrun_container_load_from_memory, json = %s\n",json);
   oci_container *container_def;
   cleanup_free char *oci_error = NULL;
   container_def = oci_container_parse_data (json, NULL, &oci_error);
@@ -435,7 +435,7 @@ libcrun_container_load_from_memory (const char *json, libcrun_error_t *err)
 libcrun_container *
 libcrun_container_load_from_file (const char *path, libcrun_error_t *err)
 {
-  printf("libcrun_container_load_from_file, path = %s",path);
+  printf("libcrun_container_load_from_file, path = %s\n",path);
   oci_container *container_def;
   cleanup_free char *oci_error = NULL;
   container_def = oci_container_parse_file (path, NULL, &oci_error);
