@@ -111,6 +111,7 @@ find_namespace (const char *name)
 static int
 syscall_clone (unsigned long flags, void *child_stack)
 {
+  printf("============: clone flag %lx =============\n",flags);
   return (int) syscall (__NR_clone, flags, child_stack);
 }
 
@@ -1490,7 +1491,7 @@ libcrun_run_linux_container (libcrun_container *container,
                              int *sync_socket_out,
                              libcrun_error_t *err)
 {
-  printf("============== run linux container =====================\n");
+  printf("============== run linux container, detach = %d =====================\n",detach);
   oci_container *def = container->container_def;
   size_t i;
   int ret;
@@ -1509,6 +1510,7 @@ libcrun_run_linux_container (libcrun_container *container,
 
       if (def->linux->namespaces[i]->path != NULL && value == CLONE_NEWPID)
         {
+          printf("=============== namespace path = %s =================\n",def->linux->namespaces[i]->path);
           cleanup_close int fd = -1;
           fd = open (def->linux->namespaces[i]->path, O_RDONLY);
           if (UNLIKELY (fd < 0))
@@ -1552,9 +1554,13 @@ libcrun_run_linux_container (libcrun_container *container,
                         &container->container_uid,
                         &container->container_gid);
 
+  printf("============ before clone, getpid = %d =============\n",getpid());
+  
   pid = syscall_clone (flags | (detach ? 0 : SIGCHLD), NULL);
   if (UNLIKELY (pid < 0))
     return crun_make_error (err, errno, "clone");
+
+  printf("=========== clone, pid = %d,getpid = %d ==============\n",pid,getpid());
 
   if (pid)
     {
