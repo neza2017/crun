@@ -658,9 +658,6 @@ do_mount (libcrun_container_t *container, const char *source, int targetfd,
           return crun_make_error (err, saved_errno, "mount `%s` to `/%s`", source, target);
         }
 
-      if ((flags & MS_BIND) && (flags & ~(MS_BIND | MS_RDONLY | ALL_PROPAGATIONS)))
-        needs_remount = true;
-
       if (targetfd >= 0)
         {
           /* We need to reopen the path as the previous targetfd is underneath the new mountpoint.  */
@@ -698,8 +695,9 @@ do_mount (libcrun_container_t *container, const char *source, int targetfd,
         }
     }
 
-  if (mountflags & MS_RDONLY)
+  if (mountflags & (MS_BIND | MS_RDONLY))
     needs_remount = true;
+
   if (data && fstype && strcmp (fstype, "proc") == 0)
     {
       single_instance = true;
@@ -743,7 +741,7 @@ do_mount_cgroup_v2 (libcrun_container_t *container, int targetfd, const char *ta
   int cgroup_mode;
 
   cgroup_mode = libcrun_get_cgroup_mode (err);
-  if (cgroup_mode < 0)
+  if (UNLIKELY (cgroup_mode < 0))
     return cgroup_mode;
 
   ret = do_mount (container, "cgroup2", targetfd, target, "cgroup2", mountflags, NULL, LABEL_NONE, err);
@@ -956,7 +954,7 @@ do_mount_cgroup (libcrun_container_t *container, const char *source, int targetf
   int cgroup_mode;
 
   cgroup_mode = libcrun_get_cgroup_mode (err);
-  if (cgroup_mode < 0)
+  if (UNLIKELY (cgroup_mode < 0))
     return cgroup_mode;
 
   switch (cgroup_mode)
@@ -2092,18 +2090,19 @@ can_setgroups (libcrun_container_t *container, libcrun_error_t *err)
 }
 
 int
-libcrun_container_setgroups (libcrun_container_t *container, libcrun_error_t *err)
+libcrun_container_setgroups (libcrun_container_t *container,
+                             runtime_spec_schema_config_schema_process *process,
+                             libcrun_error_t *err)
 {
-  runtime_spec_schema_config_schema *def = container->container_def;
   gid_t *additional_gids = NULL;
   size_t additional_gids_len = 0;
   int can_do_setgroups;
   int ret;
 
-  if (def->process != NULL && def->process->user != NULL)
+  if (process != NULL && process->user != NULL)
     {
-      additional_gids = def->process->user->additional_gids;
-      additional_gids_len = def->process->user->additional_gids_len;
+      additional_gids = process->user->additional_gids;
+      additional_gids_len = process->user->additional_gids_len;
     }
 
   can_do_setgroups = can_setgroups (container, err);
@@ -2387,7 +2386,7 @@ set_required_caps (struct all_caps_s *caps, uid_t uid, gid_t gid, int no_new_pri
 }
 
 static int
-read_caps (unsigned long caps[2], char **values, size_t len, libcrun_error_t *err)
+read_caps (unsigned long caps[2], char **values, size_t len)
 {
 #ifdef HAVE_CAP
   size_t i;
@@ -2395,7 +2394,10 @@ read_caps (unsigned long caps[2], char **values, size_t len, libcrun_error_t *er
     {
       cap_value_t cap;
       if (cap_from_name (values[i], &cap) < 0)
-        return crun_make_error (err, 0, "unknown cap: `%s`", values[i]);
+        {
+          libcrun_warning ("unknown cap: `%s`", values[i]);
+          continue;
+        }
       if (cap < 32)
         caps[0] |= CAP_TO_MASK_0 (cap);
       else
@@ -2429,32 +2431,16 @@ int
 libcrun_set_caps (runtime_spec_schema_config_schema_process_capabilities *capabilities, uid_t uid, gid_t gid,
                   int no_new_privileges, libcrun_error_t *err)
 {
-  int ret;
   struct all_caps_s caps = {};
 
   if (capabilities)
     {
-      ret = read_caps (caps.effective, capabilities->effective, capabilities->effective_len, err);
-      if (ret < 0)
-        return ret;
-
-      ret = read_caps (caps.inheritable, capabilities->inheritable, capabilities->inheritable_len, err);
-      if (ret < 0)
-        return ret;
-
-      ret = read_caps (caps.ambient, capabilities->ambient, capabilities->ambient_len, err);
-      if (ret < 0)
-        return ret;
-
-      ret = read_caps (caps.bounding, capabilities->bounding, capabilities->bounding_len, err);
-      if (ret < 0)
-        return ret;
-
-      ret = read_caps (caps.permitted, capabilities->permitted, capabilities->permitted_len, err);
-      if (ret < 0)
-        return ret;
+      read_caps (caps.effective, capabilities->effective, capabilities->effective_len);
+      read_caps (caps.inheritable, capabilities->inheritable, capabilities->inheritable_len);
+      read_caps (caps.ambient, capabilities->ambient, capabilities->ambient_len);
+      read_caps (caps.bounding, capabilities->bounding, capabilities->bounding_len);
+      read_caps (caps.permitted, capabilities->permitted, capabilities->permitted_len);
     }
-
   return set_required_caps (&caps, uid, gid, no_new_privileges, err);
 }
 
@@ -3232,7 +3218,7 @@ init_container (libcrun_container_t *container, int sync_socket_container, struc
         return ret;
     }
 
-  ret = libcrun_container_setgroups (container, err);
+  ret = libcrun_container_setgroups (container, container->container_def->process, err);
   if (UNLIKELY (ret < 0))
     return ret;
 
@@ -3751,7 +3737,7 @@ libcrun_linux_container_update (libcrun_container_status_t *status, const char *
   int cgroup_mode;
 
   cgroup_mode = libcrun_get_cgroup_mode (err);
-  if (cgroup_mode < 0)
+  if (UNLIKELY (cgroup_mode < 0))
     return cgroup_mode;
 
   ret = parse_json_file (&tree, content, &ctx, err);
